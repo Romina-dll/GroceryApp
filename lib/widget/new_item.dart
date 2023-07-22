@@ -1,9 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:form_application/models/category.dart';
 import 'package:form_application/models/grocery_item.dart';
-
+import 'package:http/http.dart' as http;
 import '../data/categories.dart';
 
 class NewItemScreen extends StatefulWidget {
@@ -20,12 +22,33 @@ class _NewItemScreen extends State<NewItemScreen> {
   var _enteredName = '';
   var _enteredQuentity = 1;
   var _selectedCategory = categories[Categories.vegetables]!;
+  var _isSending = false;
 
-  void _saveItem(){
+  void _saveItem() async {
     if(_formKey.currentState!.validate()){
       _formKey.currentState!.save();
+      setState(() {
+        _isSending = true;
+      });
+      final url = Uri.https('groceryapp-a2439-default-rtdb.firebaseio.com','shopping-list.json');
+      final response = await http.post(
+          url,
+        headers: {
+            'Content-Type' : 'application/json',
+        },
+        body: json.encode({
+          'name': _enteredName,
+          'quantity': _enteredQuentity,
+          'category': _selectedCategory.title,
+        })
+      );
+      print(response.statusCode);
+      final Map<String,dynamic> resData = json.decode(response.body);
+      if(!context.mounted)
+        return;
+
       Navigator.of(context).pop(GroceryItem(
-          id: DateTime.now().toString(),
+          id: resData['name'],
           name: _enteredName,
           quantity: _enteredQuentity,
           category: _selectedCategory,
@@ -116,11 +139,16 @@ class _NewItemScreen extends State<NewItemScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(onPressed: (){
+                  TextButton(onPressed: _isSending ? null : (){
                     _formKey.currentState!.reset();
                   },
                       child: Text('Reset')),
-                  ElevatedButton(onPressed: _saveItem, child: Text('Add Item'))
+                  ElevatedButton(
+                      onPressed: _isSending ? null : _saveItem,
+                      child: _isSending ?
+                      SizedBox(height: 16,width: 16,child: CircularProgressIndicator(),)
+                      : Text('Add Item')
+                  )
                 ],
               )
             ],
