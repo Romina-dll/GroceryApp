@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:html';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:form_application/models/grocery_item.dart';
@@ -18,33 +19,26 @@ class GroceryList extends StatefulWidget{
 
 class _GroceryList extends State<GroceryList>{
   List<GroceryItem> _groceryItems = [];
-  var _isLoading = true;
+  late Future<List<GroceryItem>> _loadedItems;
   String? _error;
 
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
-    _loadItems();
+    _loadedItems = _loadItems();
   }
 
-  void _loadItems() async {
+  Future<List<GroceryItem>> _loadItems() async {
     final url = Uri.https('groceryapp-a2439-default-rtdb.firebaseio.com','shopping-list.json');
-
-    try{
       final response = await http.get(url);
 
       if(response.statusCode >= 400){
-        setState(() {
-          _error = 'Failed to fetch data. Please try again latter!';
-        });
+        throw Exception('Failed to fetch grocery item . please try again');
       }
 
       if(response.body == 'null'){
-        setState(() {
-          _isLoading = false;
-        });
-        return;
+        return [];
       }
 
       final Map<String,dynamic>listData = json.decode(response.body);
@@ -59,15 +53,8 @@ class _GroceryList extends State<GroceryList>{
             category: category)
         );
       }
-      setState(() {
-        _groceryItems = loadedItems;
-        _isLoading = false;
-      });
-    }catch (error){
-        setState(() {
-          _error = 'Failed to fetch data. Please try again latter';
-        });
-    }
+      return loadedItems;
+
 
   }
 
@@ -99,33 +86,6 @@ class _GroceryList extends State<GroceryList>{
 
   @override
   Widget build(BuildContext context) {
-    Widget content ;
-
-
-
-    if(_isLoading){
-      content = Center(child : CircularProgressIndicator());
-    }else{
-      content = ListView.builder(
-          itemCount: _groceryItems.length,
-          itemBuilder: (ctx , index) => Dismissible(
-            key: ValueKey(_groceryItems[index].id),
-            onDismissed: (direction){
-              _removeItem(_groceryItems[index]);
-            },
-            child: ListTile(
-              title: Text(_groceryItems[index].name),
-              leading: Container(
-                width: 24,
-                height: 24,
-                color: _groceryItems[index].category.color,
-              ),
-              trailing: Text(_groceryItems[index].quantity.toString()),
-            ),
-          )
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: Text('Your Groceries'),
@@ -136,7 +96,40 @@ class _GroceryList extends State<GroceryList>{
           )
         ],
       ),
-      body:_error == null ? content : Center(child: Text(_error!),) ,
+      body:FutureBuilder(
+        future: _loadedItems,
+        builder: (context,snapshot){
+          if(snapshot.connectionState == ConnectionState.waiting){
+            return  Center(child : CircularProgressIndicator());
+          }else{
+            if(snapshot.hasError){
+              return Center(child: Text(snapshot.error.toString()));
+            }else{
+              if(snapshot.data!.isEmpty){
+                return Text('No items added yet');
+              }
+              return ListView.builder(
+                  itemCount: snapshot.data!.length,
+                  itemBuilder: (ctx , index) => Dismissible(
+                    key: ValueKey(snapshot.data![index].id),
+                    onDismissed: (direction){
+                      _removeItem(snapshot.data![index]);
+                    },
+                    child: ListTile(
+                      title: Text(snapshot.data![index].name),
+                      leading: Container(
+                        width: 24,
+                        height: 24,
+                        color: snapshot.data![index].category.color,
+                      ),
+                      trailing: Text(snapshot.data![index].quantity.toString()),
+                    ),
+                  )
+              );
+            }
+          }
+        },
+      )
     );
   }
 }
